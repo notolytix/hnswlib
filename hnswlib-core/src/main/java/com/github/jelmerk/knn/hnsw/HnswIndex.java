@@ -4,17 +4,8 @@ package com.github.jelmerk.knn.hnsw;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import com.github.jelmerk.knn.DistanceFunction;
-import com.github.jelmerk.knn.Index;
-import com.github.jelmerk.knn.Item;
-import com.github.jelmerk.knn.JavaObjectSerializer;
-import com.github.jelmerk.knn.ObjectSerializer;
-import com.github.jelmerk.knn.ProgressListener;
-import com.github.jelmerk.knn.SearchResult;
-import com.github.jelmerk.knn.util.ArrayBitSet;
-import com.github.jelmerk.knn.util.ClassLoaderObjectInputStream;
-import com.github.jelmerk.knn.util.GenericObjectPool;
-import com.github.jelmerk.knn.util.Murmur3;
+import com.github.jelmerk.knn.*;
+import com.github.jelmerk.knn.util.*;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.api.map.primitive.MutableObjectIntMap;
 import org.eclipse.collections.api.map.primitive.MutableObjectLongMap;
@@ -24,30 +15,14 @@ import org.eclipse.collections.impl.list.mutable.primitive.IntArrayList;
 import org.eclipse.collections.impl.map.mutable.primitive.ObjectIntHashMap;
 import org.eclipse.collections.impl.map.mutable.primitive.ObjectLongHashMap;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.OutputStream;
-import java.io.Serializable;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.PriorityQueue;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReferenceArray;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.*;
+
 
 /**
  * Implementation of {@link Index} that implements the hnsw algorithm.
@@ -183,7 +158,7 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
 
             Iterator<TItem> iter = new ItemIterator();
 
-            while (iter.hasNext()) {
+            while(iter.hasNext()) {
                 results.add(iter.next());
             }
 
@@ -461,11 +436,11 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
         PriorityQueue<NodeIdAndDistance<TDistance>> queueClosest = new PriorityQueue<>();
         List<NodeIdAndDistance<TDistance>> returnList = new ArrayList<>();
 
-        while (!topCandidates.isEmpty()) {
+        while(!topCandidates.isEmpty()) {
             queueClosest.add(topCandidates.poll());
         }
 
-        while (!queueClosest.isEmpty()) {
+        while(!queueClosest.isEmpty()) {
             if (returnList.size() >= m) {
                 break;
             }
@@ -559,7 +534,6 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
 
     /**
      * Changes the maximum capacity of the index.
-     *
      * @param newSize new size of the index
      */
     public void resize(int newSize) {
@@ -571,7 +545,7 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
                     Runtime.getRuntime().availableProcessors());
 
             AtomicReferenceArray<Node<TItem>> newNodes = new AtomicReferenceArray<>(newSize);
-            for (int i = 0; i < this.nodes.length(); i++) {
+            for(int i = 0; i < this.nodes.length(); i++) {
                 newNodes.set(i, this.nodes.get(i));
             }
             this.nodes = newNodes;
@@ -659,6 +633,7 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
                                 }
                             }
                         }
+
                     }
                 }
             }
@@ -1068,6 +1043,7 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
      * @param <TVector>   Type of the vector to perform distance calculation on
      * @param <TItem>     Type of items stored in the index
      * @param <TDistance> Type of distance between items (expect any numeric type: float, double, int, ..)
+     *
      * @return The restored index
      * @throws IOException in case of an I/O exception
      */
@@ -1143,7 +1119,7 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
     public static <TId, TVector, TItem extends Item<TId, TVector>, TDistance> HnswIndex<TId, TVector, TItem, TDistance> load(InputStream inputStream, ClassLoader classLoader)
             throws IOException {
 
-        try (ObjectInputStream ois = new ClassLoaderObjectInputStream(classLoader, inputStream)) {
+        try(ObjectInputStream ois = new ClassLoaderObjectInputStream(classLoader, inputStream)) {
             return (HnswIndex<TId, TVector, TItem, TDistance>) ois.readObject();
         } catch (ClassNotFoundException e) {
             throw new IllegalArgumentException("Could not read input file.", e);
@@ -1242,11 +1218,11 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
     /**
      * Start the process of building a new HNSW index.
      *
-     * @param dimensions       the dimensionality of the vectors stored in the index
+     * @param dimensions the dimensionality of the vectors stored in the index
      * @param distanceFunction the distance function
-     * @param maxItemCount     maximum number of items the index can hold
-     * @param <TVector>        Type of the vector to perform distance calculation on
-     * @param <TDistance>      Type of distance between items (expect any numeric type: float, double, int, ..)
+     * @param maxItemCount maximum number of items the index can hold
+     * @param <TVector> Type of the vector to perform distance calculation on
+     * @param <TDistance> Type of distance between items (expect any numeric type: float, double, int, ..)
      * @return a builder
      */
     public static <TVector, TDistance extends Comparable<TDistance>> Builder<TVector, TDistance> newBuilder(
@@ -1262,12 +1238,12 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
     /**
      * Start the process of building a new HNSW index.
      *
-     * @param dimensions         the dimensionality of the vectors stored in the index
-     * @param distanceFunction   the distance function
+     * @param dimensions the dimensionality of the vectors stored in the index
+     * @param distanceFunction the distance function
      * @param distanceComparator used to compare distances
-     * @param maxItemCount       maximum number of items the index can hold
-     * @param <TVector>          Type of the vector to perform distance calculation on
-     * @param <TDistance>        Type of distance between items (expect any numeric type: float, double, int, ..)
+     * @param maxItemCount maximum number of items the index can hold
+     * @param <TVector> Type of the vector to perform distance calculation on
+     * @param <TDistance> Type of distance between items (expect any numeric type: float, double, int, ..)
      * @return a builder
      */
     public static <TVector, TDistance> Builder<TVector, TDistance> newBuilder(
@@ -1419,7 +1395,7 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
 
             do {
                 node = HnswIndex.this.nodes.get(index++);
-            } while (node == null || node.deleted);
+            } while(node == null || node.deleted);
 
             done++;
 
@@ -1451,7 +1427,7 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
         }
     }
 
-    static class NodeIdAndDistance<TDistance> implements Comparable<NodeIdAndDistance<TDistance>> {
+    static class NodeIdAndDistance<TDistance> implements Comparable<NodeIdAndDistance<TDistance>>  {
 
         final int nodeId;
         final TDistance distance;
@@ -1494,8 +1470,8 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
     /**
      * Base class for HNSW index builders.
      *
-     * @param <TBuilder>  Concrete class that extends from this builder
-     * @param <TVector>   Type of the vector to perform distance calculation on
+     * @param <TBuilder> Concrete class that extends from this builder
+     * @param <TVector> Type of the vector to perform distance calculation on
      * @param <TDistance> Type of items stored in the index
      */
     public static abstract class BuilderBase<TBuilder extends BuilderBase<TBuilder, TVector, TDistance>, TVector, TDistance> {
@@ -1600,7 +1576,7 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
         /**
          * Constructs a new {@link Builder} instance.
          *
-         * @param dimensions       the dimensionality of the vectors stored in the index
+         * @param dimensions the dimensionality of the vectors stored in the index
          * @param distanceFunction the distance function
          * @param maxItemCount     the maximum number of elements in the index
          */
@@ -1651,9 +1627,9 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
     /**
      * Extension of {@link Builder} that has knows what type of item is going to be stored in the index.
      *
-     * @param <TId>       Type of the external identifier of an item
-     * @param <TVector>   Type of the vector to perform distance calculation on
-     * @param <TItem>     Type of items stored in the index
+     * @param <TId> Type of the external identifier of an item
+     * @param <TVector> Type of the vector to perform distance calculation on
+     * @param <TItem> Type of items stored in the index
      * @param <TDistance> Type of distance between items (expect any numeric type: float, double, int, ..)
      */
     public static class RefinedBuilder<TId, TVector, TItem extends Item<TId, TVector>, TDistance>
