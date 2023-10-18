@@ -1043,7 +1043,6 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
      * @param <TVector>   Type of the vector to perform distance calculation on
      * @param <TItem>     Type of items stored in the index
      * @param <TDistance> Type of distance between items (expect any numeric type: float, double, int, ..)
-     *
      * @return The restored index
      * @throws IOException in case of an I/O exception
      */
@@ -1077,6 +1076,7 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
      * @param <TVector>   Type of the vector to perform distance calculation on
      * @param <TItem>     Type of items stored in the index
      * @param <TDistance> Type of distance between items (expect any numeric type: float, double, int, ..)
+     *
      * @return The restored index
      * @throws IOException in case of an I/O exception
      */
@@ -1427,7 +1427,7 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
         }
     }
 
-    static class NodeIdAndDistance<TDistance> implements Comparable<NodeIdAndDistance<TDistance>>  {
+    static class NodeIdAndDistance<TDistance> implements Comparable<NodeIdAndDistance<TDistance>> {
 
         final int nodeId;
         final TDistance distance;
@@ -1446,7 +1446,7 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
     }
 
 
-    static class MaxValueComparator<TDistance> implements Comparator<TDistance>, Serializable {
+    static class MaxValueComparator<TDistance> implements Comparator<TDistance>, Serializable  {
 
         private static final long serialVersionUID = 1L;
 
