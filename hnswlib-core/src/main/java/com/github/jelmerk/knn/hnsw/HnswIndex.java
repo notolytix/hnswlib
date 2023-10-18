@@ -1,6 +1,9 @@
 package com.github.jelmerk.knn.hnsw;
 
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import com.github.jelmerk.knn.*;
 import com.github.jelmerk.knn.util.*;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
@@ -15,9 +18,11 @@ import org.eclipse.collections.impl.map.mutable.primitive.ObjectLongHashMap;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.concurrent.locks.*;
+
 
 /**
  * Implementation of {@link Index} that implements the hnsw algorithm.
@@ -71,6 +76,9 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
     private ArrayBitSet excludedCandidates;
 
     private ExactView exactView;
+
+    public HnswIndex() {
+    }
 
     private HnswIndex(RefinedBuilder<TId, TVector, TItem, TDistance> builder) {
 
@@ -588,43 +596,45 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
 
                 synchronized (node) {
 
-                    MutableIntList candidates = node.connections[layer];
+                    if (layer < node.connections.length) {
+                        MutableIntList candidates = node.connections[layer];
 
-                    for (int i = 0; i < candidates.size(); i++) {
+                        for (int i = 0; i < candidates.size(); i++) {
 
-                        int candidateId = candidates.get(i);
+                            int candidateId = candidates.get(i);
 
-                        if (!visitedBitSet.contains(candidateId)) {
+                            if (!visitedBitSet.contains(candidateId)) {
 
-                            visitedBitSet.add(candidateId);
+                                visitedBitSet.add(candidateId);
 
-                            Node<TItem> candidateNode = nodes.get(candidateId);
+                                Node<TItem> candidateNode = nodes.get(candidateId);
 
-                            TDistance candidateDistance = distanceFunction.distance(destination,
-                                    candidateNode.item.vector());
+                                TDistance candidateDistance = distanceFunction.distance(destination,
+                                        candidateNode.item.vector());
 
-                            if (topCandidates.size() < k || gt(lowerBound, candidateDistance)) {
+                                if (topCandidates.size() < k || gt(lowerBound, candidateDistance)) {
 
-                                NodeIdAndDistance<TDistance> candidatePair =
-                                        new NodeIdAndDistance<>(candidateId, candidateDistance, maxValueDistanceComparator);
+                                    NodeIdAndDistance<TDistance> candidatePair =
+                                            new NodeIdAndDistance<>(candidateId, candidateDistance, maxValueDistanceComparator);
 
-                                candidateSet.add(candidatePair);
+                                    candidateSet.add(candidatePair);
 
-                                if (!candidateNode.deleted) {
-                                    topCandidates.add(candidatePair);
-                                }
+                                    if (!candidateNode.deleted) {
+                                        topCandidates.add(candidatePair);
+                                    }
 
-                                if (topCandidates.size() > k) {
-                                    topCandidates.poll();
-                                }
+                                    if (topCandidates.size() > k) {
+                                        topCandidates.poll();
+                                    }
 
-                                if (!topCandidates.isEmpty()) {
-                                    lowerBound = topCandidates.peek().distance;
+                                    if (!topCandidates.isEmpty()) {
+                                        lowerBound = topCandidates.peek().distance;
+                                    }
                                 }
                             }
                         }
-                    }
 
+                    }
                 }
             }
 
@@ -754,6 +764,159 @@ public class HnswIndex<TId, TVector, TItem extends Item<TId, TVector>, TDistance
         try (ObjectOutputStream oos = new ObjectOutputStream(out)) {
             oos.writeObject(this);
         }
+    }
+
+    public static <TId, TVector, TItem extends Item<TId, TVector>, TDistance> HnswIndex<TId, TVector, TItem, TDistance> loadKryo(String path) throws IOException {
+        Kryo kryo = new Kryo();
+        kryo.setRegistrationRequired(false);
+        Input input = new Input(Files.newInputStream(Paths.get(path)));
+        HnswIndex<TId, TVector, TItem, TDistance> index = new HnswIndex<>();
+        index.readObjectKryo(kryo, input);
+        input.close();
+        return index;
+    }
+
+    public void saveKryo(String path) throws IOException {
+        Kryo kryo = new Kryo();
+        kryo.setRegistrationRequired(false);
+        Output output = new Output(Files.newOutputStream(Paths.get(path)));
+        writeObjectKryo(kryo, output);
+        output.close();
+    }
+
+    private void writeObjectKryo(Kryo kryo, Output output) {
+        output.writeByte(VERSION_1);
+        output.writeInt(dimensions);
+        kryo.writeClassAndObject(output, distanceFunction);
+        kryo.writeClassAndObject(output, distanceComparator);
+        kryo.writeClassAndObject(output, itemIdSerializer);
+        kryo.writeClassAndObject(output, itemSerializer);
+        output.writeInt(maxItemCount);
+        output.writeInt(m);
+        output.writeInt(maxM);
+        output.writeInt(maxM0);
+        output.writeDouble(levelLambda);
+        output.writeInt(ef);
+        output.writeInt(efConstruction);
+        output.writeBoolean(removeEnabled);
+        output.writeInt(nodeCount);
+        kryo.writeClassAndObject(output, lookup);
+        kryo.writeClassAndObject(output, deletedItemVersions);
+        writeNodesArrayKryo(kryo, output, nodes);
+        output.writeInt(entryPoint == null ? -1 : entryPoint.id);
+    }
+
+    private void readObjectKryo(Kryo kryo, Input input) {
+        @SuppressWarnings("unused") byte version = input.readByte(); // for coping with future incompatible serialization
+        this.dimensions = input.readInt();
+        this.distanceFunction = (DistanceFunction<TVector, TDistance>) kryo.readClassAndObject(input);
+        this.distanceComparator = (Comparator<TDistance>) kryo.readClassAndObject(input);
+        this.maxValueDistanceComparator = new MaxValueComparator<>(distanceComparator);
+        this.itemIdSerializer = (ObjectSerializer<TId>) kryo.readClassAndObject(input);
+        this.itemSerializer = (ObjectSerializer<TItem>) kryo.readClassAndObject(input);
+
+        this.maxItemCount = input.readInt();
+        this.m = input.readInt();
+        this.maxM = input.readInt();
+        this.maxM0 = input.readInt();
+        this.levelLambda = input.readDouble();
+        this.ef = input.readInt();
+        this.efConstruction = input.readInt();
+        this.removeEnabled = input.readBoolean();
+        this.nodeCount = input.readInt();
+        this.lookup = (MutableObjectIntMap<TId>) kryo.readClassAndObject(input);
+        this.deletedItemVersions = (MutableObjectLongMap<TId>) kryo.readClassAndObject(input);
+        this.nodes = readNodesArrayKryo(kryo, input);
+
+        int entrypointNodeId = input.readInt();
+        this.entryPoint = entrypointNodeId == -1 ? null : nodes.get(entrypointNodeId);
+
+        this.globalLock = new ReentrantLock();
+        this.visitedBitSetPool = new GenericObjectPool<>(() -> new ArrayBitSet(this.maxItemCount),
+                Runtime.getRuntime().availableProcessors());
+        this.excludedCandidates = new ArrayBitSet(this.maxItemCount);
+        this.locks = new HashMap<>();
+        this.exactView = new ExactView();
+    }
+
+    public void writeNodesArrayKryo(Kryo kryo, Output output, AtomicReferenceArray<Node<TItem>> nodes) {
+        int nodeCount = 0;
+        int levelsCount = 0;
+        int allNeighboursCount = 0;
+        for (int i = 0; i < nodes.length(); i++) {
+            Node<TItem> node = nodes.get(i);
+            if (node != null) {
+                for (MutableIntList levels : node.connections) {
+                    allNeighboursCount += levels.size();
+                    levelsCount += 1;
+                }
+                nodeCount += 1;
+            }
+        }
+
+        int[] levelIds1 = new int[nodeCount + 1];
+        int[] neighbourListStartIds2 = new int[levelsCount + 1];
+        int[] allNeighboursList3 = new int[allNeighboursCount];
+        List<TItem> items = new ArrayList<>(nodeCount);
+
+        int currentIndex1 = 0;
+        int currentIndex2 = 0;
+        int currentIndex3 = 0;
+        for (int i = 0; i < nodes.length(); i++) {
+            Node<TItem> node = nodes.get(i);
+            if (node != null) {
+                levelIds1[currentIndex1++] = currentIndex2;
+                for (MutableIntList level : node.connections) {
+                    neighbourListStartIds2[currentIndex2++] = currentIndex3;
+                    for (int connection : level.toArray()) {
+                        allNeighboursList3[currentIndex3++] = connection;
+                    }
+                }
+                items.add(node.item);
+            }
+        }
+        levelIds1[nodeCount] = levelIds1[nodeCount - 1];
+        neighbourListStartIds2[levelsCount] = neighbourListStartIds2.length;
+        kryo.writeObject(output, levelIds1);
+        kryo.writeObject(output, neighbourListStartIds2);
+        kryo.writeObject(output, allNeighboursList3);
+        kryo.writeClassAndObject(output, items);
+    }
+
+    private static <TItem> AtomicReferenceArray<Node<TItem>> readNodesArrayKryo(Kryo kryo, Input input) {
+        int[] levelIds1 = kryo.readObject(input, int[].class);
+        int[] neighbourListStartIds2 = kryo.readObject(input, int[].class);
+        int[] allNeighboursList3 = kryo.readObject(input, int[].class);
+        Object itemsObject = kryo.readClassAndObject(input);
+        List<TItem> items = (List<TItem>) itemsObject;
+
+        int nodeCount = levelIds1.length;
+        AtomicReferenceArray<Node<TItem>> nodes = new AtomicReferenceArray<>(nodeCount);
+
+        for (int i = 0; i < nodeCount - 1; i++) {
+            int levelSize = levelIds1[i + 1] - levelIds1[i];
+            int startIndex2 = levelIds1[i];
+            int endIndex2 = startIndex2 + levelSize;
+
+            MutableIntList[] levels = new MutableIntList[levelSize];
+            int levelsIndex = 0;
+            for (int j = startIndex2; j < endIndex2; j++) {
+                int startIndex3 = neighbourListStartIds2[j];
+                int endIndex3 = neighbourListStartIds2[j + 1];
+
+                IntArrayList neighbours = new IntArrayList();
+                for (int n = startIndex3; n < endIndex3; n++) {
+                    neighbours.add(allNeighboursList3[n]);
+                }
+                levels[levelsIndex++] = neighbours;
+            }
+
+            TItem item = (TItem) items.get(i);
+            Node<TItem> node = new Node<>(i, levels, item, false);
+            nodes.set(i, node);
+        }
+
+        return nodes;
     }
 
     private void writeObject(ObjectOutputStream oos) throws IOException {
